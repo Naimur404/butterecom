@@ -20,6 +20,8 @@ use App\Http\Controllers\PluginsController;
 use App\Http\Controllers\Settings\ProfileController; // kept for settings/profile page
 use App\Http\Controllers\TablesController;
 use App\Http\Controllers\UiController;
+use App\Http\Controllers\OrderController;
+use App\Http\Controllers\ProductController;
 use App\Http\Controllers\WidgetsController;
 
 Route::redirect('/', '/dashboard/ecommerce');
@@ -50,6 +52,25 @@ Route::middleware(['auth'])->group(function () {
         // Permissions
         Route::delete('/permissions', [AdminController::class, 'bulkDestroyPermissions'])->middleware('permission:manage permissions');
         Route::delete('/permissions/{permission}', [AdminController::class, 'destroyPermission'])->middleware('permission:manage permissions');
+    });
+
+    // ─── Order Management ─────────────────────────────────────────
+    Route::prefix('orders')->group(function () {
+        Route::get('/', [OrderController::class, 'index'])->name('orders.index');
+        Route::get('/{order}', [OrderController::class, 'show'])->name('orders.show');
+        Route::put('/{order}/status', [OrderController::class, 'updateStatus'])->name('orders.status.update');
+        Route::post('/{order}/notes', [OrderController::class, 'addNote'])->name('orders.notes.store');
+        Route::delete('/{order}/notes/{note}', [OrderController::class, 'deleteNote'])->name('orders.notes.destroy');
+        Route::put('/{order}/address', [OrderController::class, 'updateAddress'])->name('orders.address.update');
+        Route::put('/{order}/pricing', [OrderController::class, 'updatePricing'])->name('orders.pricing.update');
+        Route::put('/{order}/items/{item}', [OrderController::class, 'updateItem'])->name('orders.items.update');
+        Route::get('/{order}/activity', [OrderController::class, 'activity'])->name('orders.activity');
+    });
+
+    // ─── Products (synced from Shopify webhook) ────────────────────
+    Route::prefix('products')->group(function () {
+        Route::get('/', [ProductController::class, 'index'])->name('products.index');
+        Route::get('/{product}', [ProductController::class, 'show'])->name('products.show');
     });
 
     Route::prefix('dashboard')->middleware(['permission:view dashboard'])->group(function () {
