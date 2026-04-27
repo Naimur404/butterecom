@@ -1,28 +1,17 @@
-import { useAuth } from '@/hooks/useAuth'
-import { Link } from '@inertiajs/react'
-import { ChangeEvent, FormEvent, useState } from 'react'
+import { useForm, Link } from '@inertiajs/react'
+import { FormEvent } from 'react'
 import { Button, Form, FormCheck, FormControl, FormLabel } from 'react-bootstrap'
 
 const LoginForm = () => {
-  const { login, loading, error } = useAuth()
-
-  const [form, setForm] = useState({
+  const { data, setData, post, processing, errors } = useForm({
     email: '',
     password: '',
     remember: true,
   })
 
-  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target
-    setForm((prev) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-    }))
-  }
-
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    await login(form.email, form.password, form.remember)
+    post('/login')
   }
 
   return (
@@ -31,13 +20,29 @@ const LoginForm = () => {
         <FormLabel>
           Email address <span className="text-danger">*</span>
         </FormLabel>
-        <FormControl name="email" type="email" placeholder="you@example.com" value={form.email} required onChange={handleChange} />
+        <FormControl
+          type="email"
+          placeholder="you@example.com"
+          value={data.email}
+          required
+          onChange={(e) => setData('email', e.target.value)}
+          isInvalid={!!errors.email}
+        />
+        <FormControl.Feedback type="invalid">{errors.email}</FormControl.Feedback>
       </div>
       <div className="mb-3">
         <FormLabel>
           Password <span className="text-danger">*</span>
         </FormLabel>
-        <FormControl name="password" type="password" placeholder="••••••••" value={form.password} required onChange={handleChange} />
+        <FormControl
+          type="password"
+          placeholder="••••••••"
+          value={data.password}
+          required
+          onChange={(e) => setData('password', e.target.value)}
+          isInvalid={!!errors.password}
+        />
+        <FormControl.Feedback type="invalid">{errors.password}</FormControl.Feedback>
       </div>
       <div className="d-flex justify-content-between align-items-center mb-3">
         <FormCheck>
@@ -45,9 +50,8 @@ const LoginForm = () => {
             className="form-check-input-light fs-14"
             type="checkbox"
             id="rememberMe"
-            name="remember"
-            checked={form.remember}
-            onChange={handleChange}
+            checked={data.remember}
+            onChange={(e) => setData('remember', e.target.checked)}
           />
           <Form.Check.Label htmlFor="rememberMe">Keep me signed in</Form.Check.Label>
         </FormCheck>
@@ -55,9 +59,8 @@ const LoginForm = () => {
           Forgot Password?
         </Link>
       </div>
-      {error && <p className="text-danger">{error}</p>}
       <div className="d-grid">
-        <Button variant="primary" type="submit" className="fw-semibold py-2" disabled={loading}>
+        <Button variant="primary" type="submit" className="fw-semibold py-2" disabled={processing}>
           Sign In
         </Button>
       </div>

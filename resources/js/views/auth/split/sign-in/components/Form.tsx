@@ -1,30 +1,20 @@
 import Icon from '@/components/wrappers/Icon'
-import { useAuth } from '@/hooks/useAuth'
-import { Link } from '@inertiajs/react'
-import { ChangeEvent, FormEvent, useState } from 'react'
+import { useForm, Link } from '@inertiajs/react'
+import { FormEvent } from 'react'
 import { Button, Form, FormCheck, FormControl, FormLabel } from 'react-bootstrap'
 import FormCheckInput from 'react-bootstrap/esm/FormCheckInput'
 import FormCheckLabel from 'react-bootstrap/esm/FormCheckLabel'
 
 const LoginForm = () => {
-  const { login, loading, error } = useAuth()
-  const [form, setForm] = useState({
+  const { data, setData, post, processing, errors } = useForm({
     email: '',
     password: '',
     remember: true,
   })
 
-  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target
-    setForm((prev) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-    }))
-  }
-
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    await login(form.email, form.password, form.remember)
+    post('/login')
   }
 
   return (
@@ -35,8 +25,17 @@ const LoginForm = () => {
           <span className="text-danger">*</span>
         </FormLabel>
         <div className="app-search">
-          <FormControl name="email" type="email" id="userEmail" placeholder="you@example.com" required value={form.email} onChange={handleChange} />
+          <FormControl
+            type="email"
+            id="userEmail"
+            placeholder="you@example.com"
+            required
+            value={data.email}
+            onChange={(e) => setData('email', e.target.value)}
+            isInvalid={!!errors.email}
+          />
           <Icon icon="mail" className="app-search-icon text-muted" />
+          <FormControl.Feedback type="invalid">{errors.email}</FormControl.Feedback>
         </div>
       </div>
 
@@ -46,8 +45,17 @@ const LoginForm = () => {
           <span className="text-danger">*</span>
         </FormLabel>
         <div className="app-search">
-          <FormControl name="password" type="password" id="userPassword" placeholder="••••••••" required value={form.password} onChange={handleChange} />
+          <FormControl
+            type="password"
+            id="userPassword"
+            placeholder="••••••••"
+            required
+            value={data.password}
+            onChange={(e) => setData('password', e.target.value)}
+            isInvalid={!!errors.password}
+          />
           <Icon icon="lock-keyhole" className="app-search-icon text-muted" />
+          <FormControl.Feedback type="invalid">{errors.password}</FormControl.Feedback>
         </div>
       </div>
 
@@ -57,19 +65,17 @@ const LoginForm = () => {
             className="form-check-input-light fs-14"
             type="checkbox"
             id="rememberMe"
-            name="remember"
-            checked={form.remember}
-            onChange={handleChange}
+            checked={data.remember}
+            onChange={(e) => setData('remember', e.target.checked)}
           />
-          <FormCheckLabel>Keep me signed in</FormCheckLabel>
+          <FormCheckLabel htmlFor="rememberMe">Keep me signed in</FormCheckLabel>
         </FormCheck>
         <Link href="/auth/split/reset-pass" className="text-decoration-underline link-offset-3 text-muted">
           Forgot Password?
         </Link>
       </div>
-      {error && <p className="text-danger">{error}</p>}
       <div className="d-grid">
-        <Button variant="primary" type="submit" className="btn fw-bold py-2" disabled={loading}>
+        <Button variant="primary" type="submit" className="btn fw-bold py-2" disabled={processing}>
           Sign In
         </Button>
       </div>
