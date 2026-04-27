@@ -1,4 +1,5 @@
 export type ManagementType = {
+  id: number
   name: string
   roles: {
     label: string

@@ -9,6 +9,18 @@ import user7 from '@/images/users/user-7.jpg'
 import user8 from '@/images/users/user-8.jpg'
 import user9 from '@/images/users/user-9.jpg'
 
+export type UserType = {
+  id: string
+  numericId: number
+  name: string
+  email: string
+  image: string
+  role: string
+  date: string
+  time: string
+  status: 'active' | 'inactive' | 'suspended'
+}
+
 export type MemberRoleType = {
   id: number
   title: string

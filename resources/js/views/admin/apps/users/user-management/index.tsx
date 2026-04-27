@@ -9,12 +9,13 @@ import user7 from '@/images/users/user-7.jpg'
 import user8 from '@/images/users/user-8.jpg'
 import user9 from '@/images/users/user-9.jpg'
 import PageBreadcrumb from '@/components/PageBreadcrumb'
-import { useNotificationContext } from '@/context/useNotificationContext'
-import { useCallback, useEffect, useState } from 'react'
-import { Alert, Col, Row, Spinner } from 'react-bootstrap'
+import { useFlashToast } from '@/hooks/useFlashToast'
+import { usePage } from '@inertiajs/react'
+import { useMemo } from 'react'
+import { Col, Row } from 'react-bootstrap'
 import UserTable, { type RoleDetailsRoleOptionType, type RoleDetailsUserType } from '../role-details/components/UserTable'
 
-type UserApiRecord = {
+type UserRecord = {
   id: number
   name: string
   email: string
@@ -23,72 +24,30 @@ type UserApiRecord = {
   updated_at?: string | null
 }
 
-type UsersApiResponse = {
-  users: UserApiRecord[]
+type PageProps = {
+  users: UserRecord[]
   roles: RoleDetailsRoleOptionType[]
 }
 
-type CreateUserPayload = {
-  name: string
-  email: string
-  password: string
-  roleIds: number[]
-}
-
-type UpdateUserPayload = {
-  userId: number
-  name: string
-  email: string
-  password?: string
-  roleIds: number[]
-}
-
-const getCsrfToken = () => document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? ''
 const avatarPool = [user1, user2, user3, user4, user5, user6, user7, user8, user9, user10]
 
 const formatDateAndTime = (value?: string | null) => {
-  if (!value) {
-    return { date: '-', time: '-' }
-  }
-
+  if (!value) return { date: '-', time: '-' }
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return { date: '-', time: '-' }
-  }
-
+  if (Number.isNaN(date.getTime())) return { date: '-', time: '-' }
   return {
     date: date.toLocaleDateString(),
     time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
   }
 }
 
-const parseApiError = async (response: Response, fallbackMessage: string) => {
-  const result = (await response.json().catch(() => null)) as { message?: string; errors?: Record<string, string[]> } | null
-  const firstValidationError = result?.errors ? Object.values(result.errors).flat()[0] : null
-  return firstValidationError ?? result?.message ?? fallbackMessage
-}
-
 const Page = () => {
-  const { showNotification } = useNotificationContext()
-  const [users, setUsers] = useState<RoleDetailsUserType[]>([])
-  const [roles, setRoles] = useState<RoleDetailsRoleOptionType[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  useFlashToast()
+  const { users: rawUsers, roles } = usePage<PageProps>().props
 
-  const loadData = useCallback(async () => {
-    setError(null)
-
-    try {
-      const response = await fetch('/api/admin/users', { headers: { Accept: 'application/json' } })
-
-      if (!response.ok) {
-        throw new Error(await parseApiError(response, 'Failed to load users data.'))
-      }
-
-      const payload = (await response.json()) as UsersApiResponse
-      setRoles(payload.roles)
-
-      const mappedUsers = payload.users.map((user, index) => {
+  const users = useMemo<RoleDetailsUserType[]>(
+    () =>
+      rawUsers.map((user, index) => {
         const timestamp = formatDateAndTime(user.updated_at)
         return {
           id: user.id,
@@ -102,111 +61,18 @@ const Page = () => {
           time: timestamp.time,
           status: (user.roles.length > 0 ? 'active' : 'inactive') as RoleDetailsUserType['status'],
         }
-      })
-
-      setUsers(mappedUsers)
-    } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : 'Failed to load users data.'
-      setError(message)
-      showNotification({ message, variant: 'danger' })
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void loadData()
-  }, [loadData])
-
-  const handleRolesUpdated = async (userId: number, roleIds: number[]) => {
-    const response = await fetch(`/api/admin/users/${userId}/roles`, {
-      method: 'PUT',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': getCsrfToken(),
-      },
-      body: JSON.stringify({ role_ids: roleIds }),
-    })
-
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, 'Failed to update user roles.'))
-    }
-
-    await loadData()
-  }
-
-  const handleCreateUser = async (payload: CreateUserPayload) => {
-    const response = await fetch('/api/admin/users', {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': getCsrfToken(),
-      },
-      body: JSON.stringify({
-        name: payload.name,
-        email: payload.email,
-        password: payload.password,
-        role_ids: payload.roleIds,
       }),
-    })
-
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, 'Failed to create user.'))
-    }
-
-    await loadData()
-  }
-
-  const handleUpdateUser = async (payload: UpdateUserPayload) => {
-    const response = await fetch(`/api/admin/users/${payload.userId}`, {
-      method: 'PUT',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': getCsrfToken(),
-      },
-      body: JSON.stringify({
-        name: payload.name,
-        email: payload.email,
-        password: payload.password,
-        role_ids: payload.roleIds,
-      }),
-    })
-
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, 'Failed to update user profile.'))
-    }
-
-    await loadData()
-  }
+    [rawUsers]
+  )
 
   return (
     <>
       <PageBreadcrumb title="Users" subtitle="Admin Setting" />
-
-      {error && (
-        <Row>
-          <Col xs={12}>
-            <Alert variant="danger">{error}</Alert>
-          </Col>
-        </Row>
-      )}
-
-      {isLoading ? (
-        <Row>
-          <Col xs={12} className="d-flex justify-content-center py-5">
-            <Spinner animation="border" />
-          </Col>
-        </Row>
-      ) : (
-        <Row>
-          <Col xs={12}>
-            <UserTable users={users} roles={roles} onRolesUpdated={handleRolesUpdated} onUserCreated={handleCreateUser} onUserUpdated={handleUpdateUser} canCreateUser />
-          </Col>
-        </Row>
-      )}
+      <Row>
+        <Col xs={12}>
+          <UserTable users={users} roles={roles} canCreateUser />
+        </Col>
+      </Row>
     </>
   )
 }

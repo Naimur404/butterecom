@@ -1,6 +1,7 @@
 import defaultAvatar from '@/images/users/user-1.jpg'
 import PageBreadcrumb from '@/components/PageBreadcrumb'
 import { useNotificationContext } from '@/context/useNotificationContext'
+import { useFlashToast } from '@/hooks/useFlashToast'
 import { getStoredUserAvatar, setStoredUserAvatar } from '@/utils/userProfileStorage'
 import { router, usePage } from '@inertiajs/react'
 import { ChangeEvent, FormEvent, useEffect, useState } from 'react'
@@ -17,15 +18,8 @@ type PageProps = {
   }
 }
 
-const getCsrfToken = () => document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? ''
-
-const parseApiError = async (response: Response, fallbackMessage: string) => {
-  const result = (await response.json().catch(() => null)) as { message?: string; errors?: Record<string, string[]> } | null
-  const firstValidationError = result?.errors ? Object.values(result.errors).flat()[0] : null
-  return firstValidationError ?? result?.message ?? fallbackMessage
-}
-
 const Page = () => {
+  useFlashToast()
   const { showNotification } = useNotificationContext()
   const page = usePage<PageProps>()
   const currentUser = page.props.auth?.user ?? null
@@ -85,35 +79,20 @@ const Page = () => {
     }
 
     setIsSaving(true)
-
-    try {
-      const response = await fetch('/api/profile', {
-        method: 'PUT',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': getCsrfToken(),
-        },
-        body: JSON.stringify({
-          name: name.trim(),
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error(await parseApiError(response, 'Failed to update profile.'))
-      }
-
-      setStoredUserAvatar(currentUser.id, avatar)
-      setSuccess('Profile updated successfully.')
-      showNotification({ message: 'Profile updated successfully.', variant: 'success' })
-      router.reload({ only: ['auth'] })
-    } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : 'Failed to update profile.'
-      setError(message)
-      showNotification({ message, variant: 'danger' })
-    } finally {
-      setIsSaving(false)
-    }
+    router.put('/admin/profile', { name: name.trim() }, {
+      preserveScroll: true,
+      onSuccess: () => {
+        setStoredUserAvatar(currentUser.id, avatar)
+        setSuccess('Profile updated successfully.')
+        router.reload({ only: ['auth'] })
+      },
+      onError: (errors) => {
+        const message = Object.values(errors)[0] ?? 'Failed to update profile.'
+        setError(message)
+        showNotification({ message, variant: 'danger' })
+      },
+      onFinish: () => setIsSaving(false),
+    })
   }
 
   return (

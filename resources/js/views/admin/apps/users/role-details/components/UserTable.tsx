@@ -5,7 +5,7 @@ import { useNotificationContext } from '@/context/useNotificationContext'
 import Icon from '@/components/wrappers/Icon'
 import { toPascalCase } from '@/utils/helpers'
 import { ColumnDef, type ColumnFiltersState, createColumnHelper, getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, SortingState, Row as TableRow, Table as TableType, useReactTable } from '@tanstack/react-table'
-import { Link } from '@inertiajs/react'
+import { Link, router } from '@inertiajs/react'
 import { FormEvent, useEffect, useState } from 'react'
 import { Alert, Badge, Button, Card, CardFooter, CardHeader, Col, FormCheck, FormControl, FormLabel, FormSelect, Modal, ModalBody, ModalFooter, ModalHeader, ModalTitle, Row } from 'react-bootstrap'
 
@@ -27,33 +27,16 @@ export type RoleDetailsRoleOptionType = {
   name: string
 }
 
-type CreateUserPayload = {
-  name: string
-  email: string
-  password: string
-  roleIds: number[]
-}
-
-type UpdateUserPayload = {
-  userId: number
-  name: string
-  email: string
-  password?: string
-  roleIds: number[]
-}
-
 type UserTableProps = {
   users: RoleDetailsUserType[]
   roles: RoleDetailsRoleOptionType[]
-  onRolesUpdated?: (userId: number, roleIds: number[]) => Promise<void> | void
-  onUserCreated?: (payload: CreateUserPayload) => Promise<void> | void
-  onUserUpdated?: (payload: UpdateUserPayload) => Promise<void> | void
+  currentRoleId?: number
   canCreateUser?: boolean
 }
 
 const columnHelper = createColumnHelper<RoleDetailsUserType>()
 
-const UserTable = ({ users, roles, onRolesUpdated, onUserCreated, onUserUpdated, canCreateUser = false }: UserTableProps) => {
+const UserTable = ({ users, roles, currentRoleId, canCreateUser = false }: UserTableProps) => {
   const { showNotification } = useNotificationContext()
   const [data, setData] = useState<RoleDetailsUserType[]>(() => [...users])
   const [globalFilter, setGlobalFilter] = useState('')
@@ -136,19 +119,12 @@ const UserTable = ({ users, roles, onRolesUpdated, onUserCreated, onUserUpdated,
     setUpdateUserError(null)
   }
 
-  const handleUpdateUser = async (event: FormEvent<HTMLFormElement>) => {
+  const handleUpdateUser = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setUpdateUserError(null)
 
-    if (!onUserUpdated) {
-      setUpdateUserError('Update user action is not available.')
-      showNotification({ message: 'Update user action is not available.', variant: 'danger' })
-      return
-    }
-
     if (editingUserId === null) {
       setUpdateUserError('Invalid user selected.')
-      showNotification({ message: 'Invalid user selected.', variant: 'danger' })
       return
     }
 
@@ -165,25 +141,21 @@ const UserTable = ({ users, roles, onRolesUpdated, onUserCreated, onUserUpdated,
     }
 
     setIsUpdatingUser(true)
-
-    try {
-      await onUserUpdated({
-        userId: editingUserId,
-        name: editUserName.trim(),
-        email: editUserEmail.trim(),
-        password: editUserPassword ? editUserPassword : undefined,
-        roleIds: editUserRoleIds,
-      })
-
-      showNotification({ message: 'User profile updated successfully.', variant: 'success' })
-      closeEditProfileModal()
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to update user.'
-      setUpdateUserError(message)
-      showNotification({ message, variant: 'danger' })
-    } finally {
-      setIsUpdatingUser(false)
-    }
+    router.put(`/admin/users/${editingUserId}`, {
+      name: editUserName.trim(),
+      email: editUserEmail.trim(),
+      password: editUserPassword || undefined,
+      role_ids: editUserRoleIds,
+    }, {
+      preserveScroll: true,
+      onSuccess: () => closeEditProfileModal(),
+      onError: (errors) => {
+        const message = Object.values(errors)[0] ?? 'Failed to update user.'
+        setUpdateUserError(message)
+        showNotification({ message, variant: 'danger' })
+      },
+      onFinish: () => setIsUpdatingUser(false),
+    })
   }
 
   const resetCreateUserForm = () => {
@@ -210,15 +182,9 @@ const UserTable = ({ users, roles, onRolesUpdated, onUserCreated, onUserUpdated,
     setShowAddUserModal(false)
   }
 
-  const handleCreateUser = async (event: FormEvent<HTMLFormElement>) => {
+  const handleCreateUser = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setCreateUserError(null)
-
-    if (!onUserCreated) {
-      setCreateUserError('Create user action is not available.')
-      showNotification({ message: 'Create user action is not available.', variant: 'danger' })
-      return
-    }
 
     if (!newUserName.trim() || !newUserEmail.trim() || !newUserPassword) {
       setCreateUserError('Name, email, and password are required.')
@@ -239,61 +205,36 @@ const UserTable = ({ users, roles, onRolesUpdated, onUserCreated, onUserUpdated,
     }
 
     setIsCreatingUser(true)
-
-    try {
-      await onUserCreated({
-        name: newUserName.trim(),
-        email: newUserEmail.trim(),
-        password: newUserPassword,
-        roleIds: newUserRoleIds,
-      })
-
-      showNotification({ message: 'User created successfully.', variant: 'success' })
-      closeAddUserModal()
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create user.'
-      setCreateUserError(message)
-      showNotification({ message, variant: 'danger' })
-    } finally {
-      setIsCreatingUser(false)
-    }
+    router.post('/admin/users', {
+      name: newUserName.trim(),
+      email: newUserEmail.trim(),
+      password: newUserPassword,
+      role_ids: newUserRoleIds,
+    }, {
+      preserveScroll: true,
+      onSuccess: () => closeAddUserModal(),
+      onError: (errors) => {
+        const message = Object.values(errors)[0] ?? 'Failed to create user.'
+        setCreateUserError(message)
+        showNotification({ message, variant: 'danger' })
+      },
+      onFinish: () => setIsCreatingUser(false),
+    })
   }
 
-  const handleSaveRoles = async () => {
-    if (!activeUser) {
-      return
-    }
-
+  const handleSaveRoles = () => {
+    if (!activeUser) return
     setIsSavingRoles(true)
-
-    try {
-      await onRolesUpdated?.(activeUser.id, selectedRoleIds)
-
-      setData((prevData) =>
-        prevData.map((item) =>
-          item.id === activeUser.id
-            ? {
-                ...item,
-                roleIds: selectedRoleIds,
-                roles: roles.filter((role) => selectedRoleIds.includes(role.id)).map((role) => role.name),
-                status: selectedRoleIds.length > 0 ? 'active' : 'inactive',
-              }
-            : item
-        )
-      )
-
-      setShowAssignModal(false)
-      setActiveUser(null)
-      setSelectedRoleIds([])
-      setAssignError(null)
-      showNotification({ message: 'User roles updated successfully.', variant: 'success' })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to update user roles.'
-      setAssignError(message)
-      showNotification({ message, variant: 'danger' })
-    } finally {
-      setIsSavingRoles(false)
-    }
+    router.put(`/admin/users/${activeUser.id}/roles`, { role_ids: selectedRoleIds }, {
+      preserveScroll: true,
+      onSuccess: () => { setShowAssignModal(false); setActiveUser(null); setSelectedRoleIds([]); setAssignError(null) },
+      onError: (errors) => {
+        const message = Object.values(errors)[0] ?? 'Failed to update user roles.'
+        setAssignError(message)
+        showNotification({ message, variant: 'danger' })
+      },
+      onFinish: () => setIsSavingRoles(false),
+    })
   }
 
   const columns: ColumnDef<RoleDetailsUserType, any>[] = [
@@ -428,23 +369,52 @@ const UserTable = ({ users, roles, onRolesUpdated, onUserCreated, onUserUpdated,
 
   const handleDelete = () => {
     if (pendingDeleteRowId !== null) {
-      setData((old) => old.filter((_, idx) => idx.toString() !== pendingDeleteRowId))
-      setPagination({ ...pagination, pageIndex: 0 })
-      setShowDeleteModal(false)
-      setPendingDeleteRowId(null)
-      showNotification({ message: 'User deleted successfully.', variant: 'success' })
+      const targetUser = data.find((_, idx) => idx.toString() === pendingDeleteRowId)
+      if (!targetUser) { closeDeleteModal(); return }
+
+      if (canCreateUser) {
+        router.delete(`/admin/users/${targetUser.id}`, {
+          preserveScroll: true,
+          onSuccess: () => closeDeleteModal(),
+          onError: (errors) => {
+            const msg = Object.values(errors)[0] ?? 'Failed to delete user.'
+            showNotification({ message: msg, variant: 'danger' })
+            closeDeleteModal()
+          },
+        })
+      } else if (currentRoleId !== undefined) {
+        const newRoleIds = targetUser.roleIds.filter((rid) => rid !== currentRoleId)
+        router.put(`/admin/users/${targetUser.id}/roles`, { role_ids: newRoleIds }, {
+          preserveScroll: true,
+          onSuccess: () => closeDeleteModal(),
+          onError: (errors) => {
+            const msg = Object.values(errors)[0] ?? 'Failed to unassign user.'
+            showNotification({ message: msg, variant: 'danger' })
+            closeDeleteModal()
+          },
+        })
+      } else {
+        closeDeleteModal()
+      }
       return
     }
 
-    const selectedIds = new Set(Object.keys(selectedRowIds))
-    setData((old) => old.filter((_, idx) => !selectedIds.has(idx.toString())))
-    const deletedCount = selectedIds.size
-    setSelectedRowIds({})
-    setPagination({ ...pagination, pageIndex: 0 })
-    setShowDeleteModal(false)
-    setPendingDeleteRowId(null)
-    if (deletedCount > 0) {
-      showNotification({ message: `${deletedCount} user${deletedCount > 1 ? 's' : ''} deleted successfully.`, variant: 'success' })
+    const ids = table.getSelectedRowModel().rows.map((r) => r.original.id)
+    if (ids.length === 0) { closeDeleteModal(); return }
+
+    if (canCreateUser) {
+      router.delete('/admin/users', {
+        data: { ids },
+        preserveScroll: true,
+        onSuccess: () => { setSelectedRowIds({}); closeDeleteModal() },
+        onError: (errors) => {
+          const msg = Object.values(errors)[0] ?? 'Failed to delete users.'
+          showNotification({ message: msg, variant: 'danger' })
+          closeDeleteModal()
+        },
+      })
+    } else {
+      closeDeleteModal()
     }
   }
 

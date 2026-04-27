@@ -1,20 +1,16 @@
-
 import authImg from '@/images/auth-card-bg.svg'
 import { useNotificationContext } from '@/context/useNotificationContext'
 import Icon from '@/components/wrappers/Icon'
-import { Link } from '@inertiajs/react'
+import { Link, router } from '@inertiajs/react'
 import { FormEvent, Fragment, useState } from 'react'
 import { Alert, Button, Card, CardBody, Dropdown, DropdownItem, DropdownMenu, DropdownToggle, FormControl, FormLabel, Modal, ModalBody, ModalFooter, ModalHeader, OverlayTrigger, Tooltip } from 'react-bootstrap'
 import { MemberRoleType } from './data'
 
-const getCsrfToken = () => document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? ''
-
 type MemberRoleCardProps = {
   member: MemberRoleType
-  onChanged?: () => Promise<void> | void
 }
 
-const MemberRoleCard = ({ member, onChanged }: MemberRoleCardProps) => {
+const MemberRoleCard = ({ member }: MemberRoleCardProps) => {
   const { showNotification } = useNotificationContext()
   const { id, icon, title, users, features, description, time } = member
   const detailsHref = `/apps/users/role-details?role=${id}`
@@ -33,26 +29,19 @@ const MemberRoleCard = ({ member, onChanged }: MemberRoleCardProps) => {
   }
 
   const closeEditModal = () => {
+    if (isSaving) return
     setRoleName(title)
     setError(null)
     setShowEditModal(false)
   }
 
   const closeDeleteModal = () => {
-    if (isDeleting) {
-      return
-    }
+    if (isDeleting) return
     setError(null)
     setShowDeleteModal(false)
   }
 
-  const parseError = async (response: Response, fallbackMessage: string) => {
-    const result = (await response.json().catch(() => null)) as { message?: string; errors?: Record<string, string[]> } | null
-    const firstValidationError = result?.errors ? Object.values(result.errors).flat()[0] : null
-    return firstValidationError ?? result?.message ?? fallbackMessage
-  }
-
-  const handleEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleEditSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError(null)
 
@@ -63,62 +52,31 @@ const MemberRoleCard = ({ member, onChanged }: MemberRoleCardProps) => {
     }
 
     setIsSaving(true)
-
-    try {
-      const response = await fetch(`/api/admin/roles/${id}`, {
-        method: 'PUT',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': getCsrfToken(),
-        },
-        body: JSON.stringify({ name: roleName.trim() }),
-      })
-
-      if (!response.ok) {
-        throw new Error(await parseError(response, 'Failed to update role.'))
-      }
-
-      await onChanged?.()
-      showNotification({ message: 'Role updated successfully.', variant: 'success' })
-      closeEditModal()
-    } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : 'Failed to update role.'
-      setError(message)
-      showNotification({ message, variant: 'danger' })
-    } finally {
-      setIsSaving(false)
-    }
+    router.put(`/admin/roles/${id}`, { name: roleName.trim() }, {
+      preserveScroll: true,
+      onSuccess: () => closeEditModal(),
+      onError: (errors) => {
+        const message = Object.values(errors)[0] ?? 'Failed to update role.'
+        setError(message)
+        showNotification({ message, variant: 'danger' })
+      },
+      onFinish: () => setIsSaving(false),
+    })
   }
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     setError(null)
     setIsDeleting(true)
-
-    try {
-      const response = await fetch(`/api/admin/roles/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Accept: 'application/json',
-          'X-CSRF-TOKEN': getCsrfToken(),
-        },
-      })
-
-      if (!response.ok) {
-        throw new Error(await parseError(response, 'Failed to remove role.'))
-      }
-
-      await onChanged?.()
-      setShowDeleteModal(false)
-      setError(null)
-      showNotification({ message: 'Role removed successfully.', variant: 'success' })
-    } catch (deleteError) {
-      const message = deleteError instanceof Error ? deleteError.message : 'Failed to remove role.'
-      setError(message)
-      showNotification({ message, variant: 'danger' })
-    } finally {
-      setIsDeleting(false)
-    }
+    router.delete(`/admin/roles/${id}`, {
+      preserveScroll: true,
+      onSuccess: () => { setShowDeleteModal(false); setError(null) },
+      onError: (errors) => {
+        const message = Object.values(errors)[0] ?? 'Failed to remove role.'
+        setError(message)
+        showNotification({ message, variant: 'danger' })
+      },
+      onFinish: () => setIsDeleting(false),
+    })
   }
 
   return (
@@ -143,7 +101,6 @@ const MemberRoleCard = ({ member, onChanged }: MemberRoleCardProps) => {
                 <DropdownToggle as="a" href="#" className="text-muted fs-xl drop-arrow-none">
                   <Icon icon="ellipsis-vertical" />
                 </DropdownToggle>
-
                 <DropdownMenu>
                   <DropdownItem as={Link} href={detailsHref}>
                     <Icon icon="eye" className="me-2" />
@@ -151,10 +108,7 @@ const MemberRoleCard = ({ member, onChanged }: MemberRoleCardProps) => {
                   </DropdownItem>
                   <DropdownItem
                     href="#"
-                    onClick={(event) => {
-                      event.preventDefault()
-                      openEditModal()
-                    }}
+                    onClick={(event) => { event.preventDefault(); openEditModal() }}
                   >
                     <Icon icon="square-pen" className="me-2" />
                     Edit
@@ -162,11 +116,7 @@ const MemberRoleCard = ({ member, onChanged }: MemberRoleCardProps) => {
                   <DropdownItem
                     href="#"
                     className="text-danger"
-                    onClick={(event) => {
-                      event.preventDefault()
-                      setError(null)
-                      setShowDeleteModal(true)
-                    }}
+                    onClick={(event) => { event.preventDefault(); setError(null); setShowDeleteModal(true) }}
                   >
                     <Icon icon="trash-2" className="me-2" />
                     Remove

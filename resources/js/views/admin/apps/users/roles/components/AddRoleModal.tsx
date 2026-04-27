@@ -1,17 +1,10 @@
 import { useNotificationContext } from '@/context/useNotificationContext'
 import Icon from '@/components/wrappers/Icon'
 import Select from '@/components/wrappers/Select'
-import { FormEvent, useState } from 'react'
-import { Alert, Spinner } from 'react-bootstrap'
-import { Button, Col, FormControl, FormLabel, FormSelect, Modal, ModalBody, ModalFooter, ModalHeader, Row } from 'react-bootstrap'
+import { useForm } from '@inertiajs/react'
+import { FormEvent } from 'react'
+import { Alert, Button, Col, FormControl, FormLabel, FormSelect, Modal, ModalBody, ModalFooter, ModalHeader, Row, Spinner } from 'react-bootstrap'
 import { useToggle } from 'usehooks-ts'
-
-const getCsrfToken = () => document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? ''
-
-type AddRoleModalProps = {
-  onCreated?: () => void
-  permissions?: PermissionOption[]
-}
 
 type PermissionOption = {
   id: number
@@ -23,75 +16,38 @@ type SelectOption = {
   label: string
 }
 
-const AddRoleModal = ({ onCreated, permissions = [] }: AddRoleModalProps) => {
+type AddRoleModalProps = {
+  permissions?: PermissionOption[]
+}
+
+const AddRoleModal = ({ permissions = [] }: AddRoleModalProps) => {
   const { showNotification } = useNotificationContext()
   const [show, toggle] = useToggle(false)
-  const [roleName, setRoleName] = useState('')
-  const [selectedPermissionIds, setSelectedPermissionIds] = useState<number[]>([])
-  const [isSaving, setIsSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  const permissionSelectOptions: SelectOption[] = permissions.map((permission) => ({
-    value: permission.id,
-    label: permission.name,
-  }))
+  const form = useForm({
+    name: '',
+    permission_ids: [] as number[],
+  })
 
-  const selectedPermissionOptions = permissionSelectOptions.filter((option) => selectedPermissionIds.includes(option.value))
-
-  const resetState = () => {
-    setRoleName('')
-    setSelectedPermissionIds([])
-    setError(null)
-    setIsSaving(false)
-  }
+  const permissionSelectOptions: SelectOption[] = permissions.map((p) => ({ value: p.id, label: p.name }))
+  const selectedPermissionOptions = permissionSelectOptions.filter((opt) => form.data.permission_ids.includes(opt.value))
 
   const handleClose = () => {
-    resetState()
+    form.reset()
+    form.clearErrors()
     toggle()
   }
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    setError(null)
-
-    if (!roleName.trim()) {
-      setError('Role name is required.')
-      showNotification({ message: 'Role name is required.', variant: 'danger' })
-      return
-    }
-
-    setIsSaving(true)
-
-    try {
-      const response = await fetch('/api/admin/roles', {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': getCsrfToken(),
-        },
-        body: JSON.stringify({
-          name: roleName.trim(),
-          permission_ids: selectedPermissionIds,
-        }),
-      })
-
-      if (!response.ok) {
-        const result = (await response.json().catch(() => null)) as { message?: string; errors?: Record<string, string[]> } | null
-        const firstValidationError = result?.errors ? Object.values(result.errors).flat()[0] : null
-        throw new Error(firstValidationError ?? result?.message ?? 'Failed to create role.')
-      }
-
-      showNotification({ message: 'Role created successfully.', variant: 'success' })
-      onCreated?.()
-      handleClose()
-    } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : 'Failed to create role.'
-      setError(message)
-      showNotification({ message, variant: 'danger' })
-    } finally {
-      setIsSaving(false)
-    }
+    form.post('/admin/roles', {
+      preserveScroll: true,
+      onSuccess: () => handleClose(),
+      onError: (errors) => {
+        const firstError = Object.values(errors)[0]
+        if (firstError) showNotification({ message: firstError, variant: 'danger' })
+      },
+    })
   }
 
   return (
@@ -109,15 +65,22 @@ const AddRoleModal = ({ onCreated, permissions = [] }: AddRoleModalProps) => {
         </ModalHeader>
         <form id="editRoleForm" onSubmit={handleSubmit}>
           <ModalBody>
-            {error && <Alert variant="danger">{error}</Alert>}
+            {form.errors.name && <Alert variant="danger">{form.errors.name}</Alert>}
             <Row className="g-3">
               <Col md={6}>
                 <FormLabel htmlFor="editRoleName">Role Name</FormLabel>
-                <FormControl type="text" id="editRoleName" value={roleName} onChange={(event) => setRoleName(event.target.value)} placeholder="e.g. Developer, Project Manager" required />
+                <FormControl
+                  type="text"
+                  id="editRoleName"
+                  value={form.data.name}
+                  onChange={(e) => form.setData('name', e.target.value)}
+                  placeholder="e.g. Developer, Project Manager"
+                  required
+                />
               </Col>
               <Col md={6}>
                 <FormLabel htmlFor="editRoleDescription">Description</FormLabel>
-                <FormControl type="text" id="editRoleDescription" placeholder="Brief description" required />
+                <FormControl type="text" id="editRoleDescription" placeholder="Brief description" />
               </Col>
               <Col xs={12}>
                 <FormLabel htmlFor="editRoleResponsibilities">Key Responsibilities</FormLabel>
@@ -131,7 +94,7 @@ const AddRoleModal = ({ onCreated, permissions = [] }: AddRoleModalProps) => {
                   value={selectedPermissionOptions}
                   onChange={(value) => {
                     const selected = (value as SelectOption[] | null) ?? []
-                    setSelectedPermissionIds(selected.map((option) => option.value))
+                    form.setData('permission_ids', selected.map((o) => o.value))
                   }}
                   placeholder="Select permissions"
                   noOptionsMessage={() => 'No permissions found'}
@@ -156,11 +119,11 @@ const AddRoleModal = ({ onCreated, permissions = [] }: AddRoleModalProps) => {
             </Row>
           </ModalBody>
           <ModalFooter>
-            <Button variant="light" type="button" onClick={handleClose} disabled={isSaving}>
+            <Button variant="light" type="button" onClick={handleClose} disabled={form.processing}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" disabled={isSaving}>
-              {isSaving ? (
+            <Button type="submit" variant="primary" disabled={form.processing}>
+              {form.processing ? (
                 <>
                   <Spinner as="span" animation="border" size="sm" className="me-1" />
                   Saving...

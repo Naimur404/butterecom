@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 
 class AppsController extends Controller
 {
@@ -220,7 +223,29 @@ class AppsController extends Controller
 
     public function usersPermissions()
     {
-        return Inertia::render('admin/apps/users/permissions/index');
+        $permissions = Permission::query()
+            ->with('roles:id,name')
+            ->with('roles.users:id')
+            ->orderBy('name')
+            ->get()
+            ->map(function (Permission $permission) {
+                $roles      = $permission->roles->pluck('name')->values();
+                $usersCount = $permission->roles
+                    ->flatMap(fn (Role $role) => $role->users->pluck('id'))
+                    ->unique()
+                    ->count();
+
+                return [
+                    'id'         => $permission->id,
+                    'name'       => $permission->name,
+                    'roles'      => $roles,
+                    'users_count' => $usersCount,
+                    'updated_at' => $permission->updated_at,
+                ];
+            })
+            ->values();
+
+        return Inertia::render('admin/apps/users/permissions/index', compact('permissions'));
     }
 
     public function usersProfile()
@@ -230,16 +255,117 @@ class AppsController extends Controller
 
     public function usersManagement()
     {
-        return Inertia::render('admin/apps/users/user-management/index');
+        $roles = Role::query()->orderBy('name')->get(['id', 'name'])->values();
+
+        $users = User::query()
+            ->with('roles:id,name')
+            ->orderBy('name')
+            ->get(['id', 'name', 'email', 'updated_at'])
+            ->map(fn (User $user) => [
+                'id'         => $user->id,
+                'name'       => $user->name,
+                'email'      => $user->email,
+                'roles'      => $user->roles->pluck('name')->values(),
+                'role_ids'   => $user->roles->pluck('id')->values(),
+                'updated_at' => $user->updated_at,
+            ])
+            ->values();
+
+        return Inertia::render('admin/apps/users/user-management/index', compact('users', 'roles'));
     }
 
-    public function usersRoleDetails()
+    public function usersRoleDetails(Request $request)
     {
-        return Inertia::render('admin/apps/users/role-details/index');
+        $roleId = (int) $request->query('role', 0);
+
+        $allRolesWithDetails = Role::query()
+            ->with('permissions:id,name')
+            ->withCount('users')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Role $role) => [
+                'id'               => $role->id,
+                'name'             => $role->name,
+                'permissions'      => $role->permissions->pluck('name')->values(),
+                'permissions_count' => $role->permissions->count(),
+                'users_count'      => $role->users_count,
+                'updated_at'       => $role->updated_at,
+            ])
+            ->values();
+
+        $selectedRoleData = $roleId
+            ? $allRolesWithDetails->firstWhere('id', $roleId)
+            : $allRolesWithDetails->first();
+
+        $selectedRoleId = $selectedRoleData['id'] ?? null;
+
+        $users = $selectedRoleId
+            ? User::query()
+                ->with('roles:id,name')
+                ->whereHas('roles', fn ($q) => $q->where('roles.id', $selectedRoleId))
+                ->orderBy('name')
+                ->get(['id', 'name', 'email', 'updated_at'])
+                ->map(fn (User $user) => [
+                    'id'         => $user->id,
+                    'name'       => $user->name,
+                    'email'      => $user->email,
+                    'roles'      => $user->roles->pluck('name')->values(),
+                    'role_ids'   => $user->roles->pluck('id')->values(),
+                    'updated_at' => $user->updated_at,
+                ])
+                ->values()
+            : collect()->values();
+
+        $allRoles = Role::query()->orderBy('name')->get(['id', 'name'])->values();
+
+        $permissionOptions = Permission::query()
+            ->orderBy('name')
+            ->pluck('name')
+            ->values();
+
+        return Inertia::render('admin/apps/users/role-details/index', [
+            'selectedRole'      => $selectedRoleData,
+            'allRoles'          => $allRoles,
+            'permissionOptions' => $permissionOptions,
+            'users'             => $users,
+        ]);
     }
 
     public function usersRoles()
     {
-        return Inertia::render('admin/apps/users/roles/index');
+        $roles = Role::query()
+            ->with('permissions:id,name')
+            ->withCount('users')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Role $role) => [
+                'id'               => $role->id,
+                'name'             => $role->name,
+                'permissions'      => $role->permissions->pluck('name')->values(),
+                'permissions_count' => $role->permissions->count(),
+                'users_count'      => $role->users_count,
+                'updated_at'       => $role->updated_at,
+            ])
+            ->values();
+
+        $permissions = Permission::query()
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->values();
+
+        $users = User::query()
+            ->with('roles:id,name')
+            ->orderBy('name')
+            ->get(['id', 'name', 'email', 'updated_at'])
+            ->map(fn (User $user) => [
+                'id'         => $user->id,
+                'name'       => $user->name,
+                'email'      => $user->email,
+                'roles'      => $user->roles->pluck('name')->values(),
+                'updated_at' => $user->updated_at,
+            ])
+            ->values();
+
+        return Inertia::render('admin/apps/users/roles/index', compact('roles', 'permissions', 'users'));
     }
 }

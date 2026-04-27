@@ -5,7 +5,7 @@ use Inertia\Inertia;
 use Laravel\Fortify\Features;
 
 use App\Http\Controllers\AppsController;
-use App\Http\Controllers\Api\Admin\UserRolePermissionApiController;
+use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ChartsController;
 use App\Http\Controllers\DashboardController;
@@ -17,7 +17,7 @@ use App\Http\Controllers\LayoutsController;
 use App\Http\Controllers\MapsController;
 use App\Http\Controllers\PagesController;
 use App\Http\Controllers\PluginsController;
-use App\Http\Controllers\Settings\ProfileController;
+use App\Http\Controllers\Settings\ProfileController; // kept for settings/profile page
 use App\Http\Controllers\TablesController;
 use App\Http\Controllers\UiController;
 use App\Http\Controllers\WidgetsController;
@@ -31,7 +31,26 @@ Route::redirect('/', '/dashboard/ecommerce');
 */
 Route::middleware(['auth'])->group(function () {
 
-    Route::put('/api/profile', [ProfileController::class, 'updateAppProfile']);
+    Route::prefix('admin')->group(function () {
+        // Profile
+        Route::put('/profile', [AdminController::class, 'updateProfile']);
+
+        // Roles
+        Route::post('/roles', [AdminController::class, 'storeRole'])->middleware('permission:manage roles');
+        Route::put('/roles/{role}', [AdminController::class, 'updateRole'])->middleware('permission:manage roles');
+        Route::delete('/roles/{role}', [AdminController::class, 'destroyRole'])->middleware('permission:manage roles');
+
+        // Users
+        Route::post('/users', [AdminController::class, 'storeUser'])->middleware('permission:manage users');
+        Route::put('/users/{user}', [AdminController::class, 'updateUser'])->middleware('permission:manage users');
+        Route::delete('/users', [AdminController::class, 'bulkDestroyUsers'])->middleware('permission:manage users');
+        Route::delete('/users/{user}', [AdminController::class, 'destroyUser'])->middleware('permission:manage users');
+        Route::put('/users/{user}/roles', [AdminController::class, 'assignRoles'])->middleware('permission:manage roles|manage users');
+
+        // Permissions
+        Route::delete('/permissions', [AdminController::class, 'bulkDestroyPermissions'])->middleware('permission:manage permissions');
+        Route::delete('/permissions/{permission}', [AdminController::class, 'destroyPermission'])->middleware('permission:manage permissions');
+    });
 
     Route::prefix('dashboard')->middleware(['permission:view dashboard'])->group(function () {
         Route::get('/ecommerce', [DashboardController::class, 'ecommerce']);
@@ -112,18 +131,6 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/role-details', [AppsController::class, 'usersRoleDetails'])->middleware('permission:manage roles');
             Route::get('/roles', [AppsController::class, 'usersRoles'])->middleware('permission:manage roles');
         });
-    });
-
-    Route::prefix('api/admin')->group(function () {
-        Route::get('/roles', [UserRolePermissionApiController::class, 'roles'])->middleware('permission:manage roles');
-        Route::post('/roles', [UserRolePermissionApiController::class, 'storeRole'])->middleware('permission:manage roles');
-        Route::put('/roles/{role}', [UserRolePermissionApiController::class, 'updateRole'])->middleware('permission:manage roles');
-        Route::delete('/roles/{role}', [UserRolePermissionApiController::class, 'destroyRole'])->middleware('permission:manage roles');
-        Route::get('/permissions', [UserRolePermissionApiController::class, 'permissions'])->middleware('permission:manage permissions');
-        Route::get('/users', [UserRolePermissionApiController::class, 'users'])->middleware('permission:manage roles|manage users');
-        Route::post('/users', [UserRolePermissionApiController::class, 'storeUser'])->middleware('permission:manage users');
-        Route::put('/users/{user}', [UserRolePermissionApiController::class, 'updateUser'])->middleware('permission:manage users');
-        Route::put('/users/{user}/roles', [UserRolePermissionApiController::class, 'assignRoles'])->middleware('permission:manage roles|manage users');
     });
 
     Route::prefix('charts')->middleware(['permission:view charts'])->group(function () {

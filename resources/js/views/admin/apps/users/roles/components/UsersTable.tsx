@@ -5,7 +5,7 @@ import { useNotificationContext } from '@/context/useNotificationContext'
 import Icon from '@/components/wrappers/Icon'
 import { toPascalCase } from '@/utils/helpers'
 import { ColumnDef, type ColumnFiltersState, createColumnHelper, getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, SortingState, Row as TableRow, Table as TableType, useReactTable } from '@tanstack/react-table'
-import { Link } from '@inertiajs/react'
+import { Link, router } from '@inertiajs/react'
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, CardFooter, CardHeader, Col, FormControl, FormLabel, FormSelect, Modal, ModalBody, ModalFooter, ModalHeader, ModalTitle, Row } from 'react-bootstrap'
 import { useToggle } from 'usehooks-ts'
@@ -92,7 +92,7 @@ const UsersTable = ({ users, roleOptions = [] }: UsersTableProps) => {
             size="sm"
             className="btn-icon rounded-circle"
             onClick={() => {
-              setPendingDeleteRowId(row.id)
+              setPendingDeleteUserId(row.original.numericId)
               setShowDeleteModal(true)
             }}
           >
@@ -148,37 +148,48 @@ const UsersTable = ({ users, roleOptions = [] }: UsersTableProps) => {
   const end = Math.min(start + pageSize - 1, totalItems)
 
   const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false)
-  const [pendingDeleteRowId, setPendingDeleteRowId] = useState<string | null>(null)
+  const [pendingDeleteUserId, setPendingDeleteUserId] = useState<number | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const openBulkDeleteModal = () => {
-    setPendingDeleteRowId(null)
+    setPendingDeleteUserId(null)
     setShowDeleteModal(true)
   }
 
   const closeDeleteModal = () => {
+    if (isDeleting) return
     setShowDeleteModal(false)
-    setPendingDeleteRowId(null)
+    setPendingDeleteUserId(null)
   }
 
   const handleDelete = () => {
-    if (pendingDeleteRowId !== null) {
-      setData((old) => old.filter((_, idx) => idx.toString() !== pendingDeleteRowId))
-      setShowDeleteModal(false)
-      setPendingDeleteRowId(null)
-      showNotification({ message: 'User deleted successfully.', variant: 'success' })
+    setIsDeleting(true)
+    if (pendingDeleteUserId !== null) {
+      router.delete(`/admin/users/${pendingDeleteUserId}`, {
+        preserveScroll: true,
+        onSuccess: () => closeDeleteModal(),
+        onError: (errors) => {
+          const msg = Object.values(errors)[0] ?? 'Failed to delete user.'
+          showNotification({ message: msg, variant: 'danger' })
+          closeDeleteModal()
+        },
+        onFinish: () => setIsDeleting(false),
+      })
       return
     }
-
-    const selectedIds = new Set(Object.keys(selectedRowIds))
-    setData((old) => old.filter((_, idx) => !selectedIds.has(idx.toString())))
-    const deletedCount = selectedIds.size
-    setSelectedRowIds({})
-    setPagination({ ...pagination, pageIndex: 0 })
-    setShowDeleteModal(false)
-    setPendingDeleteRowId(null)
-    if (deletedCount > 0) {
-      showNotification({ message: `${deletedCount} user${deletedCount > 1 ? 's' : ''} deleted successfully.`, variant: 'success' })
-    }
+    const ids = table.getSelectedRowModel().rows.map((r) => r.original.numericId)
+    if (ids.length === 0) { setIsDeleting(false); closeDeleteModal(); return }
+    router.delete('/admin/users', {
+      data: { ids },
+      preserveScroll: true,
+      onSuccess: () => { setSelectedRowIds({}); closeDeleteModal() },
+      onError: (errors) => {
+        const msg = Object.values(errors)[0] ?? 'Failed to delete users.'
+        showNotification({ message: msg, variant: 'danger' })
+        closeDeleteModal()
+      },
+      onFinish: () => setIsDeleting(false),
+    })
   }
 
   const [show, toggle] = useToggle(false)
@@ -256,7 +267,7 @@ const UsersTable = ({ users, roleOptions = [] }: UsersTableProps) => {
             />
           </CardFooter>
         )}
-        <DeleteConfirmationModal show={showDeleteModal} onHide={closeDeleteModal} onConfirm={handleDelete} selectedCount={pendingDeleteRowId !== null ? 1 : Object.keys(selectedRowIds).length} itemName="row" />
+        <DeleteConfirmationModal show={showDeleteModal} onHide={closeDeleteModal} onConfirm={handleDelete} selectedCount={pendingDeleteUserId !== null ? 1 : table.getSelectedRowModel().rows.length} itemName="row" />
       </Card>
       <Modal show={show} onHide={toggle} className="fade" dialogClassName="modal-lg" id="addUserModal" tabIndex={-1} aria-labelledby="addUserModalLabel" aria-hidden="true">
         <ModalHeader>

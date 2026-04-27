@@ -4,12 +4,13 @@ import TablePagination from '@/components/table/TablePagination'
 import { useNotificationContext } from '@/context/useNotificationContext'
 import Icon from '@/components/wrappers/Icon'
 import { ColumnDef, createColumnHelper, getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, SortingState, Row as TableRow, useReactTable } from '@tanstack/react-table'
+import { router } from '@inertiajs/react'
 import clsx from 'clsx'
-import { useEffect, useState } from 'react'
-import { Alert, Button, Card, CardBody, CardFooter, CardHeader, FormControl, FormSelect, Spinner } from 'react-bootstrap'
+import { useMemo, useState } from 'react'
+import { Button, Card, CardBody, CardFooter, CardHeader, FormControl, FormSelect } from 'react-bootstrap'
 import { ManagementType } from './data'
 
-type PermissionApiRecord = {
+type PermissionRecord = {
   id: number
   name: string
   roles: string[]
@@ -17,29 +18,23 @@ type PermissionApiRecord = {
   updated_at?: string | null
 }
 
-type PermissionsApiResponse = {
-  permissions: PermissionApiRecord[]
+type PermissionTableProps = {
+  permissions: PermissionRecord[]
 }
 
 const roleBadgeClasses = ['bg-primary-subtle text-primary', 'bg-danger-subtle text-danger', 'bg-info-subtle text-info', 'bg-secondary-subtle text-secondary', 'bg-warning-subtle text-warning']
 
 const formatDateAndTime = (value?: string | null) => {
-  if (!value) {
-    return { date: '-', time: '-' }
-  }
-
+  if (!value) return { date: '-', time: '-' }
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return { date: '-', time: '-' }
-  }
-
+  if (Number.isNaN(date.getTime())) return { date: '-', time: '-' }
   return {
     date: date.toLocaleDateString(),
     time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
   }
 }
 
-const PermissionTable = () => {
+const PermissionTable = ({ permissions }: PermissionTableProps) => {
   const { showNotification } = useNotificationContext()
   const columnHelper = createColumnHelper<ManagementType>()
 
@@ -94,59 +89,30 @@ const PermissionTable = () => {
     },
   ]
 
-  const [data, setData] = useState<ManagementType[]>([])
+  const data = useMemo<ManagementType[]>(
+    () =>
+      permissions.map((permission) => {
+        const timestamp = formatDateAndTime(permission.updated_at)
+        return {
+          id: permission.id,
+          name: permission.name,
+          roles: permission.roles.map((role, idx) => ({
+            label: role,
+            className: roleBadgeClasses[idx % roleBadgeClasses.length],
+          })),
+          date: timestamp.date,
+          time: timestamp.time,
+          users: permission.users_count,
+        }
+      }),
+    [permissions]
+  )
+
   const [globalFilter, setGlobalFilter] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 8 })
   const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({})
   const [pendingDeleteRowId, setPendingDeleteRowId] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const loadPermissions = async () => {
-      setError(null)
-
-      try {
-        const response = await fetch('/api/admin/permissions', {
-          headers: {
-            Accept: 'application/json',
-          },
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to load permissions from database.')
-        }
-
-        const payload = (await response.json()) as PermissionsApiResponse
-
-        const mappedData = payload.permissions.map((permission) => {
-          const timestamp = formatDateAndTime(permission.updated_at)
-
-          return {
-            name: permission.name,
-            roles: permission.roles.map((role, idx) => ({
-              label: role,
-              className: roleBadgeClasses[idx % roleBadgeClasses.length],
-            })),
-            date: timestamp.date,
-            time: timestamp.time,
-            users: permission.users_count,
-          }
-        })
-
-        setData(mappedData)
-      } catch (fetchError) {
-        const message = fetchError instanceof Error ? fetchError.message : 'Failed to load permissions from database.'
-        setError(message)
-        showNotification({ message, variant: 'danger' })
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    void loadPermissions()
-  }, [])
 
   const table = useReactTable({
     data,
@@ -185,24 +151,32 @@ const PermissionTable = () => {
 
   const handleDelete = () => {
     if (pendingDeleteRowId !== null) {
-      setData((old) => old.filter((_, idx) => idx.toString() !== pendingDeleteRowId))
-      setPagination({ ...pagination, pageIndex: 0 })
-      setShowDeleteModal(false)
-      setPendingDeleteRowId(null)
-      showNotification({ message: 'Permission removed successfully.', variant: 'success' })
+      const targetItem = data.find((_, idx) => idx.toString() === pendingDeleteRowId)
+      if (!targetItem) { closeDeleteModal(); return }
+      router.delete(`/admin/permissions/${targetItem.id}`, {
+        preserveScroll: true,
+        onSuccess: () => closeDeleteModal(),
+        onError: (errors) => {
+          const msg = Object.values(errors)[0] ?? 'Failed to remove permission.'
+          showNotification({ message: msg, variant: 'danger' })
+          closeDeleteModal()
+        },
+      })
       return
     }
 
-    const selectedIds = new Set(Object.keys(selectedRowIds))
-    setData((old) => old.filter((_, idx) => !selectedIds.has(idx.toString())))
-    const deletedCount = selectedIds.size
-    setSelectedRowIds({})
-    setPagination({ ...pagination, pageIndex: 0 })
-    setShowDeleteModal(false)
-    setPendingDeleteRowId(null)
-    if (deletedCount > 0) {
-      showNotification({ message: `${deletedCount} permission${deletedCount > 1 ? 's' : ''} removed successfully.`, variant: 'success' })
-    }
+    const ids = table.getSelectedRowModel().rows.map((r) => r.original.id)
+    if (ids.length === 0) { closeDeleteModal(); return }
+    router.delete('/admin/permissions', {
+      data: { ids },
+      preserveScroll: true,
+      onSuccess: () => { setSelectedRowIds({}); closeDeleteModal() },
+      onError: (errors) => {
+        const msg = Object.values(errors)[0] ?? 'Failed to remove permissions.'
+        showNotification({ message: msg, variant: 'danger' })
+        closeDeleteModal()
+      },
+    })
   }
 
   return (
@@ -229,40 +203,25 @@ const PermissionTable = () => {
           </FormSelect>
         </div>
       </CardHeader>
-      {error && (
-        <CardBody className="py-2">
-          <Alert variant="danger" className="mb-0">
-            {error}
-          </Alert>
-        </CardBody>
-      )}
 
-      {isLoading ? (
-        <CardBody className="d-flex justify-content-center py-5">
-          <Spinner animation="border" />
-        </CardBody>
-      ) : (
-        <>
-          <DataTable<ManagementType> table={table} emptyMessage="No records found" />
-          {table.getRowModel().rows.length > 0 && (
-            <CardFooter className="border-0">
-              <TablePagination
-                totalItems={totalItems}
-                start={start}
-                end={end}
-                itemsName="permissions"
-                showInfo
-                previousPage={table.previousPage}
-                canPreviousPage={table.getCanPreviousPage()}
-                pageCount={table.getPageCount()}
-                pageIndex={table.getState().pagination.pageIndex}
-                setPageIndex={table.setPageIndex}
-                nextPage={table.nextPage}
-                canNextPage={table.getCanNextPage()}
-              />
-            </CardFooter>
-          )}
-        </>
+      <DataTable<ManagementType> table={table} emptyMessage="No records found" />
+      {table.getRowModel().rows.length > 0 && (
+        <CardFooter className="border-0">
+          <TablePagination
+            totalItems={totalItems}
+            start={start}
+            end={end}
+            itemsName="permissions"
+            showInfo
+            previousPage={table.previousPage}
+            canPreviousPage={table.getCanPreviousPage()}
+            pageCount={table.getPageCount()}
+            pageIndex={table.getState().pagination.pageIndex}
+            setPageIndex={table.setPageIndex}
+            nextPage={table.nextPage}
+            canNextPage={table.getCanNextPage()}
+          />
+        </CardFooter>
       )}
       <DeleteConfirmationModal show={showDeleteModal} onHide={closeDeleteModal} onConfirm={handleDelete} selectedCount={pendingDeleteRowId !== null ? 1 : Object.keys(selectedRowIds).length} itemName="row" />
     </Card>
