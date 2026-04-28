@@ -13,16 +13,14 @@ class Order extends Model
     use HasFactory, LogsActivity;
 
     protected $fillable = [
-        'shopify_order_id',
         'customer_id',
+        'funnel_id',
         'order_number',
         'name',
-        'confirmation_number',
-        'financial_status',
+        'payment_status',
         'fulfillment_status',
         'delivery_status',
         'payment_method',
-        'tags',
         // Shipping address
         'shipping_name',
         'shipping_phone',
@@ -31,8 +29,6 @@ class Order extends Model
         'shipping_city',
         'shipping_country',
         'shipping_country_code',
-        'shipping_latitude',
-        'shipping_longitude',
         // Pricing
         'currency',
         'subtotal',
@@ -44,24 +40,16 @@ class Order extends Model
         // Shipping line
         'shipping_line_title',
         'shipping_line_price',
-        // Meta
-        'source_ip',
-        'source_url',
-        'source_app_id',
-        'order_status_url',
-        // Timestamps
-        'shopify_created_at',
-        'shopify_processed_at',
-        'webhook_received_at',
+        // Coupon & notes
+        'coupon_code',
+        'coupon_discount',
+        'notes',
     ];
 
     protected function casts(): array
     {
         return [
-            'shopify_order_id' => 'integer',
             'order_number' => 'integer',
-            'shipping_latitude' => 'decimal:7',
-            'shipping_longitude' => 'decimal:7',
             'subtotal' => 'decimal:2',
             'shipping_charge' => 'decimal:2',
             'discount' => 'decimal:2',
@@ -69,23 +57,19 @@ class Order extends Model
             'total' => 'decimal:2',
             'total_outstanding' => 'decimal:2',
             'shipping_line_price' => 'decimal:2',
-            'shopify_created_at' => 'datetime',
-            'shopify_processed_at' => 'datetime',
-            'webhook_received_at' => 'datetime',
+            'coupon_discount' => 'decimal:2',
         ];
     }
 
     /**
-     * Valid financial statuses.
+     * Valid payment statuses.
      */
-    public const FINANCIAL_STATUSES = [
+    public const PAYMENT_STATUSES = [
         'pending',
-        'authorized',
         'paid',
         'partially_paid',
-        'partially_refunded',
         'refunded',
-        'voided',
+        'failed',
     ];
 
     /**
@@ -95,7 +79,6 @@ class Order extends Model
         null,
         'fulfilled',
         'partial',
-        'restocked',
     ];
 
     /**
@@ -112,6 +95,17 @@ class Order extends Model
         'cancelled',
     ];
 
+    /**
+     * Valid payment methods.
+     */
+    public const PAYMENT_METHODS = [
+        'cod',
+        'bkash',
+        'nagad',
+        'sslcommerz',
+        'bank_transfer',
+    ];
+
     // ─── Relationships ──────────────────────────────────────────
 
     /**
@@ -120,6 +114,14 @@ class Order extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    /**
+     * The funnel that originated this order (if any).
+     */
+    public function funnel(): BelongsTo
+    {
+        return $this->belongsTo(Funnel::class);
     }
 
     /**
@@ -133,7 +135,7 @@ class Order extends Model
     /**
      * Notes attached to this order.
      */
-    public function notes(): HasMany
+    public function orderNotes(): HasMany
     {
         return $this->hasMany(OrderNote::class)->latest();
     }
@@ -174,7 +176,7 @@ class Order extends Model
      */
     public function isPaid(): bool
     {
-        return $this->financial_status === 'paid';
+        return $this->payment_status === 'paid';
     }
 
     /**
@@ -183,5 +185,14 @@ class Order extends Model
     public function isDelivered(): bool
     {
         return $this->delivery_status === 'delivered';
+    }
+
+    /**
+     * Generate the next order number.
+     */
+    public static function generateOrderNumber(): int
+    {
+        $last = static::max('order_number') ?? 1000;
+        return $last + 1;
     }
 }

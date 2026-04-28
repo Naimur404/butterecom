@@ -13,16 +13,14 @@ class OrderItem extends Model
 
     protected $fillable = [
         'order_id',
-        'shopify_line_item_id',
-        'shopify_product_id',
-        'shopify_variant_id',
+        'product_id',
+        'variant_id',
         'title',
         'variant_title',
         'quantity',
         'unit_price',
         'total_price',
         'currency',
-        'vendor',
         'fulfillment_status',
         'requires_shipping',
     ];
@@ -30,9 +28,6 @@ class OrderItem extends Model
     protected function casts(): array
     {
         return [
-            'shopify_line_item_id' => 'integer',
-            'shopify_product_id' => 'integer',
-            'shopify_variant_id' => 'integer',
             'quantity' => 'integer',
             'unit_price' => 'decimal:2',
             'total_price' => 'decimal:2',
@@ -46,6 +41,22 @@ class OrderItem extends Model
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
+    }
+
+    /**
+     * The product for this line item.
+     */
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    /**
+     * The variant for this line item.
+     */
+    public function variant(): BelongsTo
+    {
+        return $this->belongsTo(ProductVariant::class, 'variant_id');
     }
 
     /**

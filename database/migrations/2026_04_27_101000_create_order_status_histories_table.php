@@ -6,18 +6,15 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('order_status_histories', function (Blueprint $table) {
             $table->id();
             $table->foreignId('order_id')->constrained('orders')->cascadeOnDelete();
             $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
-            $table->string('field_changed', 100); // e.g. financial_status, delivery_status
+            $table->string('field_changed', 100);
             $table->string('old_value')->nullable();
-            $table->string('new_value');
+            $table->string('new_value')->nullable();
             $table->text('reason')->nullable();
             $table->timestamps();
 
@@ -26,9 +23,6 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('order_status_histories');

@@ -12,11 +12,14 @@ class Customer extends Model
     use HasFactory, LogsActivity;
 
     protected $fillable = [
-        'shopify_customer_id',
         'first_name',
         'last_name',
         'email',
         'phone',
+        'address',
+        'city',
+        'country',
+        'notes',
     ];
 
     /**
@@ -41,5 +44,21 @@ class Customer extends Model
     public function activityLogs()
     {
         return $this->morphMany(ActivityLog::class, 'loggable');
+    }
+
+    /**
+     * Get total spent by this customer.
+     */
+    public function getTotalSpentAttribute(): float
+    {
+        return (float) $this->orders()->where('payment_status', 'paid')->sum('total');
+    }
+
+    /**
+     * Get order count.
+     */
+    public function getOrderCountAttribute(): int
+    {
+        return $this->orders()->count();
     }
 }

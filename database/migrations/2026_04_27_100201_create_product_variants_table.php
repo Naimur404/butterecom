@@ -11,9 +11,17 @@ return new class extends Migration
         Schema::create('product_variants', function (Blueprint $table) {
             $table->id();
             $table->foreignId('product_id')->constrained('products')->cascadeOnDelete();
-            $table->unsignedBigInteger('shopify_variant_id')->unique();
-            $table->string('title')->nullable(); // e.g. "150 ml"
+            $table->string('title')->nullable();
+            $table->string('sku')->nullable()->unique();
             $table->decimal('price', 12, 2)->default(0);
+            $table->decimal('compare_at_price', 12, 2)->nullable();
+            $table->decimal('cost_price', 12, 2)->nullable();
+            $table->integer('stock_quantity')->default(0);
+            $table->string('option1')->nullable();
+            $table->string('option2')->nullable();
+            $table->string('option3')->nullable();
+            $table->decimal('weight', 10, 3)->nullable();
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
 
             $table->index('product_id');

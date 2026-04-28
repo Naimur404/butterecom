@@ -6,25 +6,22 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('customers', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('shopify_customer_id')->unique();
             $table->string('first_name');
             $table->string('last_name')->nullable();
             $table->string('email')->nullable()->index();
             $table->string('phone', 50)->nullable()->index();
+            $table->string('address', 500)->nullable();
+            $table->string('city')->nullable();
+            $table->string('country')->nullable()->default('Bangladesh');
+            $table->text('notes')->nullable();
             $table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('customers');
